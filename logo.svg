@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- OZIL — personal mark: the O and Z fused into one continuous stroke.
+       Top arc = Z's top bar, diagonal = Z's spine, bottom arc = Z's base;
+       the silhouette stays a circle, so it reads as O and Z at once.
+       Black & white, minimal. -->
+  <rect width="256" height="256" rx="58" fill="#0a0a0a"/>
+  <path d="M54.1 85.3A85.3 85.3 0 0 1 201.9 85.3L54.1 170.7A85.3 85.3 0 0 0 201.9 170.7"
+        fill="none" stroke="#fff" stroke-width="21" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
