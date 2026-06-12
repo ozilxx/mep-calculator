@@ -5,12 +5,12 @@
 ════════════════════════════════════════════════════════ */
 
 const COUNTRY_CODES = {
-  KSA:    ['SBC 501/601', 'ASHRAE 90.1', 'NFPA 13', 'IPC'],
-  UAE:    ['Dubai GBR', 'ASHRAE 90.1', 'UAE FLSC', 'UPC'],
-  Egypt:  ['ECP 306', 'ASHRAE 62.1', 'NFPA 13', 'EPC'],
-  Qatar:  ['QCS 2014', 'GSAS', 'NFPA 13', 'IPC'],
-  Jordan: ['JBC', 'ASHRAE 62.1', 'NFPA 13', 'IPC'],
-  Generic:['ASHRAE 90.1', 'ASHRAE 62.1', 'NFPA 13', 'IPC/UPC']
+  KSA:    ['SBC 2024 (501/701/801)', 'ASHRAE 90.1-2025', 'NFPA 13-2025', 'SBC 701 (IPC)'],
+  UAE:    ['UAE FLSC 2018', 'Dubai GBR', 'ASHRAE 90.1-2025', 'UPC 2024'],
+  Egypt:  ['Fire Code 126', 'ECP 306', 'ASHRAE 62.1-2025', 'NFPA 13-2025'],
+  Qatar:  ['QCS 2024', 'GSAS', 'NFPA 13-2025', 'UPC 2024'],
+  Jordan: ['JBC', 'ASHRAE 62.1-2025', 'NFPA 13-2025', 'IPC 2021'],
+  Generic:['ASHRAE 90.1-2025', 'ASHRAE 62.1-2025', 'NFPA 13-2025', 'IPC/UPC']
 };
 
 /* Country-level HVAC defaults: design conditions + code envelope limits */

@@ -242,7 +242,7 @@ const App = {
 
   /* sheet close on backdrop / Esc */
   document.getElementById('sheetBg').addEventListener('click',()=>UI.closeSheet());
-  document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ UI.closeSheet(); UI.toggleSidebar(false); closeModal('modalLinear'); } });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ UI.closeSheet(); UI.toggleSidebar(false); closeModal('modalLinear'); closeModal('modalReport'); } });
 
   /* macOS traffic lights */
   document.getElementById('lightClose').addEventListener('click',()=>{

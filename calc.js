@@ -55,6 +55,10 @@ function hvacFields(s){
     {key:'idb', label:'Indoor DB',  qty:'temp', step:.5, shared:1, def:()=>c.idb},
     {key:'irh', label:'Indoor RH', unit:'%', step:5, shared:1, def:()=>c.irh, max:[80,'RH above 80% is unrealistic']},
     {key:'sdt', label:'Supply ΔT', qty:'dtemp', step:1, shared:1, def:()=>c.sdt, pos:1},
+    {key:'oaMode', label:'Outdoor Air Basis', type:'select', shared:1,
+      options:[['ashrae','ASHRAE 62.1 — Rp·P + Ra·A'],['pct','% of supply air']], def:()=>'ashrae'},
+    {key:'oaPct', label:'OA Fraction of Supply', unit:'%', step:5, shared:1, def:()=>20, pos:1,
+      max:[100,'OA cannot exceed 100% of supply'], hint:'applies only when Outdoor Air Basis is % of supply'},
     {key:'ceilH', label:'Ceiling Height', qty:'length', step:.1, shared:1, def:()=>3, pos:1},
     {key:'wallU', label:'Wall U-Value', qty:'uval', step:.01, shared:1, def:()=>c.wallU, pos:1, codeMax:()=>c.wallU},
     {key:'roofU', label:'Roof U-Value', qty:'uval', step:.01, shared:1, def:()=>c.roofU, pos:1, codeMax:()=>c.roofU},
@@ -175,7 +179,19 @@ function calcHvacSpace(s){
   comps.push({n:'Lighting', s:f('lpd')*area, l:0});
   comps.push({n:'Equipment', s:f('epd')*area, l:0});
   const vr = ventRates(s.type);
-  const oaLs = vr.rp*s.occupants + vr.ra*area;                 // ASHRAE 62.1 Vbz
+  let oaLs;
+  if(f('oaMode')==='pct'){
+    /* OA = p × supply, but supply airflow includes the OA load itself:
+       A = sf·(baseS + 1.224·p·dT·A)/(1.206·sdt)  →  A = sf·baseS/(1.206·sdt − sf·1.224·p·dT)
+       denominator clamped to 5% — beyond that the OA fraction is infeasible at this ΔT */
+    const p = Math.min(1, Math.max(0, f('oaPct')/100));
+    const baseS = comps.reduce((a,c)=>a+Math.max(0,c.s),0);
+    const sfp = 1+f('safety')/100, k = 1.206*Math.max(1,f('sdt'));
+    const denom = Math.max(k*0.05, k - sfp*1.224*p*Math.max(0,dT));
+    oaLs = p*sfp*baseS/denom;
+  } else {
+    oaLs = vr.rp*s.occupants + vr.ra*area;                     // ASHRAE 62.1 Vbz
+  }
   const oaMh = oaLs*3.6;
   comps.push({n:'Ventilation (OA)', s:0.34*oaMh*dT, l:840*oaMh*dW});
 

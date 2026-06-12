@@ -201,7 +201,7 @@ function renderHvac(){
       ${tile('hl', fmt(hv.TR,1), 'TR', 'Total Tons')}
       ${tile('', fmt(hv.divTR,1), 'TR', `Plant Load @ ${Math.round((S.hvacSys.diversity)*100)}% diversity`)}
       ${tile('', dv('airflow',hv.air,0), uLbl('airflow'), 'Total Supply Air')}
-      ${tile('', dv('airflow',hv.oa,0), uLbl('airflow'), 'Total Fresh Air (62.1)')}
+      ${tile('', dv('airflow',hv.oa,0), uLbl('airflow'), `Total Fresh Air (${pval('hvac','oaMode')==='pct'?pval('hvac','oaPct')+'% of supply':'62.1'})`)}
       ${tile('', totalArea()>0?dv('pdens',hv.kW*1000/Math.max(1,totalArea()),0):'—', uLbl('pdens'), 'Avg Load Density')}
     </div>
     ${hv.divTR>0?`<div class="banner green">⚙️ Suggested plant: <strong>${E(hv.plant)}</strong></div>`:''}
@@ -397,6 +397,7 @@ function renderReport(){
     <div class="card-title"><span class="dot" style="color:var(--green);background:var(--green)"></span>Design Summary Report</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-p" style="background:linear-gradient(145deg,#7680dd,#5e6ad2);box-shadow:0 4px 14px rgba(94,106,210,.4),inset 0 1px 0 rgba(255,255,255,.35)" onclick="openLinear()">${ICO_LINEAR_W}&nbsp;Add to Linear</button>
+      <button class="btn btn-p" onclick="openReportExport()">💾 Save BODR (.docx)</button>
       <button class="btn btn-p" onclick="UI.print()">🖨 Print / Save PDF</button>
     </div></div>
     <div class="card-sub">${E(m.name)} · ${E(m.buildingType)} · ${E(m.city?m.city+', ':'')}${E(m.country)} · ${E(m.date||'')}
@@ -487,7 +488,7 @@ function sheetHvac(s,r){
     ${tile('hl',fmt(r.kW,1),'kW','Cooling Load')}
     ${tile('hl',fmt(r.TR,2),'TR','Tons')}
     ${tile('',dv('airflow',r.airflowLs,0),uLbl('airflow'),'Supply Air')}
-    ${tile('',dv('airflow',r.oaLs,0),uLbl('airflow'),'Fresh Air (62.1)')}
+    ${tile('',dv('airflow',r.oaLs,0),uLbl('airflow'),`Fresh Air (${fval(s,'hvac','oaMode')==='pct'?fval(s,'hvac','oaPct')+'% of supply':'62.1'})`)}
     ${tile('',(r.SHR*100).toFixed(0)+'%','SHR','Sensible Ratio')}
     ${tile('',fmt(r.ductD,0),'mm Ø','Supply Duct @ 5 m/s')}
   </div>
@@ -581,7 +582,7 @@ function buildPrint(){
   <tr><td>${S.floors.length}</td><td>${allSpaces().length}</td><td>${dvu('area',totalArea(),0)}</td><td>${totalOccupants()}</td><td>${dvu('length',m.height,1)}</td></tr></table>
 
   <h2>2. HVAC</h2>
-  <div class="pmeta">Design: ${dv('temp',cd().odb,0)}/${dv('temp',cd().owb,0)} ${uLbl('temp')} outdoor DB/WB · ${dv('temp',cd().idb,0)} ${uLbl('temp')} / ${cd().irh}% RH indoor · ASHRAE 62.1 ventilation</div>
+  <div class="pmeta">Design: ${dv('temp',cd().odb,0)}/${dv('temp',cd().owb,0)} ${uLbl('temp')} outdoor DB/WB · ${dv('temp',cd().idb,0)} ${uLbl('temp')} / ${cd().irh}% RH indoor · ${pval('hvac','oaMode')==='pct'?'ventilation @ '+pval('hvac','oaPct')+'% of supply air':'ASHRAE 62.1 ventilation'}</div>
   <table><tr><th>Total Cooling</th><th>@ Diversity ${Math.round(S.hvacSys.diversity*100)}%</th><th>Supply Air</th><th>Fresh Air</th><th>Plant</th></tr>
   <tr><td>${fmt(hv.kW,1)} kW / ${fmt(hv.TR,1)} TR</td><td>${fmt(hv.divKW,1)} kW / ${fmt(hv.divTR,1)} TR</td>
   <td>${dvu('airflow',hv.air,0)}</td><td>${dvu('airflow',hv.oa,0)}</td><td>${E(hv.plant)}</td></tr></table>
@@ -628,13 +629,20 @@ const UI = {
     if(keepSheet!==false && sheetId!=null && document.getElementById('sheet').classList.contains('show')) renderSheet();
   },
   tab(t){
-    activeTab=t;
     document.querySelectorAll('#mainTabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
-    UI.refresh(false);
-    /* bubbly entrance on tab switch only — field edits re-render without replaying it */
     const v=document.getElementById('view');
-    v.classList.remove('swap'); void v.offsetWidth; v.classList.add('swap');
-    clearTimeout(UI._sw); UI._sw=setTimeout(()=>v.classList.remove('swap'),800);
+    /* cross-fade on tab switch only — field edits re-render without replaying it */
+    const go=()=>{
+      activeTab=t;
+      UI.refresh(false);
+      v.classList.remove('leave');
+      v.classList.remove('swap'); void v.offsetWidth; v.classList.add('swap');
+      clearTimeout(UI._sw); UI._sw=setTimeout(()=>v.classList.remove('swap'),700);
+    };
+    clearTimeout(UI._lv);
+    if(t===activeTab || !v.firstChild){ go(); return; }   /* first paint or same tab — skip fade-out */
+    v.classList.add('leave');
+    UI._lv=setTimeout(go,150);
   },
   /* meta & systems */
   meta(k,v){ S.meta[k]=v; if(k==='buildingType') allSpaces().forEach(x=>{ if(x.space.occAuto) x.space.occupants=spaceOcc(x.space.type,x.space.area); }); App.save(); UI.refresh(); },
