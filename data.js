@@ -74,6 +74,30 @@ const VENT_621 = {
 };
 function ventRates(t){ return VENT_621[t] || VENT_621.Other; }
 
+/* ── Mechanical exhaust — code minimum rates ──
+   Source: ASHRAE 62.1-2019 Table 6-4 "Minimum Exhaust Rates".
+   Area rates converted from the table's cfm/ft² (× 5.08 → L/s·m²);
+   toilet/urinal rates are the table's per-fixture values (50 cfm = 25 L/s).
+   These are NOT estimates — each carries its Table 6-4 citation in `ref`. */
+const EXHAUST_621 = {
+  'Parking':           {area:3.8,  ref:'ASHRAE 62.1-2019 Table 6-4 — Parking garage (0.75 cfm/ft²)'},
+  'Kitchen':           {area:3.5,  ref:'ASHRAE 62.1-2019 Table 6-4 — Kitchen, commercial (0.7 cfm/ft²)'},
+  'Workshop':          {area:7.6,  ref:'ASHRAE 62.1-2019 Table 6-4 — Auto repair rooms (1.5 cfm/ft²)'},
+  'Storage':           {area:5.1,  ref:'ASHRAE 62.1-2019 Table 6-4 — Janitor / storage rooms (1.0 cfm/ft²)'},
+  'Lab':               {area:5.1,  ref:'ASHRAE 62.1-2019 Table 6-4 — Educational science labs (1.0 cfm/ft²)'},
+  'Shower / Ablution': {area:1.3,  ref:'ASHRAE 62.1-2019 Table 6-4 — Locker / dressing rooms (0.25 cfm/ft²)'},
+  'Toilet':            {perWC:25,  ref:'ASHRAE 62.1-2019 Table 6-4 — Toilets, public (50 cfm per WC/urinal)'},
+  'Bathroom':          {perWC:25,  ref:'ASHRAE 62.1-2019 Table 6-4 — Toilets, public (50 cfm per WC/urinal)'}
+};
+function exhaustSpec(t){ return EXHAUST_621[t] || null; }
+/* default per-space exhaust area-rate (L/s·m²) for a type, 0 if the code rate is fixture-based or N/A */
+function exhaustAreaRate(t){ const e=EXHAUST_621[t]; return (e && e.area!=null) ? e.area : 0; }
+/* a space defaults to exhaust-only when ASHRAE 62.1 governs it by exhaust (gov note) */
+function defaultHvacMode(t){
+  const v=VENT_621[t];
+  return (v && v.gov && /exhaust/i.test(v.gov)) ? 'exhaust' : 'cooling';
+}
+
 /* Plumbing country defaults */
 const PLUMB_CTRY = {
   KSA:    {vel:2.0, minP:100, slope:0.02, mat:'PPR'},
@@ -154,6 +178,53 @@ const SPACE_CAT = {
   mosque:      ['Mosque','Shower / Ablution','Toilet','Reception','Corridor','Storage','Staircase','Parking'],
   industrial:  ['Workshop','Warehouse','Storage','Office','Lab','Reception','Corridor','Toilet','Staircase','Parking']
 };
+
+/* ── smart space-type detection from a free-text space name ──
+   ordered most-specific → most-generic; first keyword hit wins.
+   keywords are matched whole-word (letters bounded by non-letters),
+   so "driver room" → Bedroom, "conf." → Meeting Room, etc. */
+const SPACE_TYPE_KEYWORDS = [
+  ['Operating Theater', ['operating theat','operation theat','operating room','operation room','operating','surgery','surgical','recovery room']],
+  ['Patient Room',      ['patient','ward','icu','i.c.u','inpatient','exam room','consult','treatment','clinic']],
+  ['Server Room',       ['server','data center','data centre','datacenter','rack room','comms room','mdf','idf','telecom','it room','network room']],
+  ['Meeting Room',      ['meeting','conference','conf','boardroom','board room','seminar','huddle']],
+  ['Classroom',         ['classroom','class room','lecture','tutorial','training room','teaching','nursery','kindergarten']],
+  ['Library',           ['library','reading room','archive']],
+  ['Lab',               ['laboratory','lab','labs','research room']],
+  ['Mosque',            ['mosque','masjid','prayer','musalla','musallah','musalah','salah','jamaat']],
+  ['Shower / Ablution', ['ablution','wudu','wudhu','wuzu','shower','changing room','locker']],
+  ['Bathroom',          ['bathroom','bath room','bath','ensuite','en-suite','en suite']],
+  ['Toilet',            ['toilet','wc','w.c','water closet','restroom','rest room','washroom','lavatory','powder room']],
+  ['Kitchen',           ['kitchen','pantry','kitchenette','scullery']],
+  ['Restaurant',        ['restaurant','dining','diner','cafe','café','cafeteria','canteen','food court','coffee shop']],
+  ['Gym',               ['gym','gymnasium','fitness','workout','exercise','aerobics','sport hall','sports hall']],
+  ['Guest Room',        ['guest','hotel room','suite','cabin']],
+  ['Bedroom',           ['bedroom','bed room','driver','maid','nanny','servant','staff room','guard room','dormitory','dorm','sleeping','master room','kids room','child room']],
+  ['Living Room / Majlis',['living','majlis','majles','sitting','lounge','family room','salon','saloon','drawing room','sitting room']],
+  ['Reception',         ['reception','lobby','foyer','waiting','entrance','vestibule','front desk','welcome']],
+  ['Retail',            ['retail','shop','store front','storefront','boutique','showroom','show room','market','mall']],
+  ['Workshop',          ['workshop','work shop','maintenance','repair','machine room','plant room','mechanical room','technical room','fabrication']],
+  ['Warehouse',         ['warehouse','loading','goods','distribution']],
+  ['Parking',           ['parking','car park','carpark','garage','basement parking']],
+  ['Staircase',         ['staircase','stairwell','stair','stairs','escalator','fire escape']],
+  ['Corridor',          ['corridor','hallway','hall way','passage','passageway','walkway','lobby corridor']],
+  ['Storage',           ['storage','store room','storeroom','store','closet','utility','janitor','linen','filing','archive room']],
+  ['Office',            ['office','study','admin','administration','workspace','work room','manager','secretary','cubicle','open plan']]
+];
+
+/* return a SPACE_TYPE_LIST entry inferred from a free-text name, or null */
+function guessSpaceType(name){
+  if(!name) return null;
+  const n = String(name).toLowerCase();
+  for(const [type, kws] of SPACE_TYPE_KEYWORDS){
+    for(const kw of kws){
+      const k = kw.trim();
+      const re = new RegExp('(^|[^a-z])' + k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '([^a-z]|$)');
+      if(re.test(n)) return type;
+    }
+  }
+  return null;
+}
 
 /* context-aware occupant density overrides (persons/m²) by building type */
 const OCC_BY_BUILDING = {

@@ -406,10 +406,19 @@ function rptHvac(){
     ['Infiltration',RF(pval('hvac','ach'),1)+' ACH'],
     ['Safety factor / Diversity',RF(pval('hvac','safety'),0)+'% / '+RF((S.hvacSys.diversity||0.85)*100,0)+'%']],'hvac',{numFrom:1});
   x+=xH2('3.3 Zone-by-Zone Cooling Load','hvac');
-  const zRows=[['Space','Floor','Area (m²)','kW','TR','Supply (L/s)','Fresh Air (L/s)']];
+  const hasExh=(hv.exhaust||0)>0;
+  const zHead=['Space','Floor','Area (m²)','kW','TR','Supply (L/s)','Fresh Air (L/s)'];
+  if(hasExh) zHead.push('Exhaust (L/s)');
+  const zRows=[zHead];
   spaces.forEach(({floor,space})=>{ const r=R.spaces[space.id].hvac;
-    zRows.push([space.name,floor.name,RF(space.area,0),RF(r.kW,1),RF(r.TR,2),RF(r.airflowLs,0),RF(r.oaLs,0)]); });
-  zRows.push(['TOTAL','','',RF(hv.kW,1),RF(hv.TR,1),RF(hv.air,0),RF(hv.oa,0)]);
+    const row = r.exhaust
+      ? [space.name,floor.name,RF(space.area,0),'—','—','—','—']
+      : [space.name,floor.name,RF(space.area,0),RF(r.kW,1),RF(r.TR,2),RF(r.airflowLs,0),RF(r.oaLs,0)];
+    if(hasExh) row.push(r.exhaust?RF(r.exhaustLs,0):'—');
+    zRows.push(row); });
+  const totRow=['TOTAL','','',RF(hv.kW,1),RF(hv.TR,1),RF(hv.air,0),RF(hv.oa,0)];
+  if(hasExh) totRow.push(RF(hv.exhaust,0));
+  zRows.push(totRow);
   x+=xTable(zRows,'hvac',{numFrom:2,totalLast:1});
   x+=xNote('All cooling load values presented in the above schedule represent preliminary estimates appropriate for the Concept Design stage. Final cooling loads, equipment capacities, and system sizing shall be determined through detailed energy simulation using HAP (Hourly Analysis Program) in accordance with the ASHRAE Handbook — Fundamentals (2025), Chapter 18 (RTS method), prior to equipment procurement.');
   x+=xNote('It should be noted that the preliminary cooling load values presented herein are subject to revision upon completion of the detailed HAP energy simulation. Final calculated loads may deviate from the values indicated above by a margin of up to ±25%, subject to actual building envelope performance, occupancy patterns, and climatic data inputs applied during the detailed design stage.');
@@ -424,6 +433,17 @@ function rptHvac(){
     if(ksa)x+=xQuote('SBC 501 (2024), Sections 403.2 and 403.3 with Table 403.3.1.1 — the minimum outdoor airflow rate shall be determined in accordance with Section 403.3, using the occupancy-based ventilation rates of Table 403.3.1.1 (consistent with ASHRAE 62.1). [Requirement]','hvac');
   } else {
     x+=xBody('No mechanical outdoor-air (fresh air) requirement has resulted from the spaces scheduled at this stage. Ventilation compliance with ASHRAE 62.1 (2025), Section 6.2 shall be re-verified at detailed design once final occupancies are confirmed.');
+  }
+  const exhOnly=spaces.filter(({space})=>{ const r=R.spaces[space.id].hvac; return r&&r.exhaust; });
+  if(exhOnly.length){
+    const exhRows=[['Space','Floor','Exhaust (L/s)','Code basis']];
+    exhOnly.forEach(({floor,space})=>{ const r=R.spaces[space.id].hvac;
+      exhRows.push([space.name,floor.name,RF(r.exhaustLs,0),r.exhaustRef||'ASHRAE 62.1 (2025), Table 6-4']); });
+    exhRows.push(['TOTAL','',RF(hv.exhaust,0),'']);
+    x+=xH2('4.1 Mechanical Exhaust (Exhaust-Only Spaces)','hvac');
+    x+=xBody('The following space(s) are served by dedicated mechanical exhaust without sensible cooling. Minimum exhaust airflow rates are taken from ASHRAE 62.1 (2025) Table 6-4 (Minimum Exhaust Rates); toilet rooms are computed on a per-fixture basis. Total mechanical exhaust at this stage is '+RF(hv.exhaust,0)+' L/s across '+exhOnly.length+' space(s).');
+    x+=xTable(exhRows,'hvac',{numFrom:2,totalLast:1});
+    x+=xQuote('ASHRAE 62.1 (2025), Section 6.5 and Table 6-4 (Minimum Exhaust Rates) — mechanical exhaust shall be provided for the occupancy categories listed in Table 6-4 at no less than the rates specified therein (e.g., parking garages 0.75 cfm/ft²; commercial kitchens 0.7 cfm/ft²; public toilet rooms 50 cfm per water closet or urinal). [Requirement]','hvac');
   }
   const exh=spaces.filter(({space})=>{ const r=R.spaces[space.id].hvac; return r&&r.oaGov; });
   if(exh.length)x+=xNote('Exhaust-governed spaces (mechanical exhaust in lieu of supply OA): '+exh.map(({space})=>space.name+' ('+(R.spaces[space.id].hvac.oaGov)+')').join(' · ')+'.');
@@ -665,7 +685,10 @@ function openReportExport(){
   document.getElementById('projMenu')&&document.getElementById('projMenu').classList.remove('show');
   const def='BODR_'+(S.meta.name||'Project').replace(/[^\w؀-ۿ\- ]+/g,'').trim().replace(/\s+/g,'_')+'_R00';
   document.getElementById('rptName').value=def;
-  ['rptFire','rptHvac','rptPlumb'].forEach(id=>document.getElementById(id).checked=true);
+  /* default each discipline on only when at least one space uses it — unselected disciplines stay out of the report */
+  document.getElementById('rptHvac').checked=discActive('hvac');
+  document.getElementById('rptPlumb').checked=discActive('plumb');
+  document.getElementById('rptFire').checked=discActive('fire');
   document.getElementById('rptResult').innerHTML='';
   openModal('modalReport');
 }

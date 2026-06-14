@@ -24,6 +24,8 @@ function findSpace(id){
   return null;
 }
 function floorOf(sp){ return S.floors.find(f => f.spaces.includes(sp)); }
+/* is a discipline used by at least one space? (drives summary visibility) */
+function discActive(d){ return allSpaces().some(x => x.space.disc[d]); }
 function totalOccupants(){ return allSpaces().reduce((a,x)=>a+(+x.space.occupants||0),0); }
 function totalArea(){ return allSpaces().reduce((a,x)=>a+(+x.space.area||0),0); }
 
@@ -68,6 +70,14 @@ function hvacFields(s){
     {key:'safety', label:'Safety Factor', unit:'%', step:1, shared:1, def:()=>10, max:[30,'Above 30% oversizes equipment']},
     {key:'lpd', label:'Lighting LPD', qty:'pdens', step:1, shared:1, def:()=>LPD[bt()]??12, hint:'ASHRAE 90.1 by building type'},
     {key:'epd', label:'Equipment EPD', qty:'pdens', step:1, shared:1, def:()=>EPD[bt()]??10},
+    /* per-space mode: full cooling load vs exhaust-only (ventilation, no cooling) */
+    {key:'hvacMode', label:'HVAC Mode', type:'select',
+      options:[['cooling','Cooling load'],['exhaust','Exhaust only — no cooling']],
+      def:()=> s ? defaultHvacMode(s.type) : 'cooling',
+      hint:'spaces like toilets, parking & stores are exhaust-only — no sensible cooling'},
+    {key:'exhaustRate', label:'Exhaust Rate', unit:'L/s·m²', step:.1,
+      def:()=> s ? exhaustAreaRate(s.type) : 0,
+      hint:'ASHRAE 62.1 Table 6-4 minimum (toilets use per-WC rate from fixtures)'},
     /* per-space geometry */
     {key:'roofExposed', label:'Exposed Roof', type:'select', options:[['yes','Yes — top floor'],['no','No — intermediate']],
       def:()=> (fl && fl.level==='top') ? 'yes':'no'},
@@ -161,8 +171,31 @@ function dfu2Stack(d){ const r=STACK_SIZES.find(x=>x[1]>=d); return r?r[0]:200; 
 ════════════════════════════════════════════════════════ */
 function calcHvacSpace(s){
   const f=(k)=>fval(s,'hvac',k);
+  const area=+s.area||0, ch=f('ceilH'), vol=area*ch;
+
+  /* ── exhaust-only spaces: ventilation per ASHRAE 62.1 Table 6-4, no cooling load ── */
+  if(f('hvacMode')==='exhaust'){
+    const spec=exhaustSpec(s.type)||{};
+    const rate=f('exhaustRate');                                 // L/s·m² (defaults to Table 6-4)
+    const exhArea=Math.max(0,rate)*area;
+    let exhFix=0, fixBasis='';
+    if(spec.perWC!=null){                                        // toilet rooms: per-WC/urinal
+      const n=(+(s.fixtures&&s.fixtures.wc||0))+(+(s.fixtures&&s.fixtures.urinal||0));
+      exhFix=n*spec.perWC; fixBasis=`${n} WC/urinal × ${spec.perWC} L/s`;
+    }
+    const exhaustLs=Math.max(exhArea, exhFix);
+    const basis = exhFix>=exhArea && exhFix>0 ? fixBasis
+                : rate>0 ? `${area.toFixed(0)} m² × ${rate} L/s·m²` : '';
+    const ach = vol>0 ? exhaustLs*3.6/vol : 0;                   // implied air changes/hr
+    const ductA=exhaustLs/1000/5, ductD=Math.round(Math.sqrt(4*ductA/Math.PI)*1000/50)*50;
+    const fan = exhaustLs<=0 ? '—' : 'Exhaust fan — '+Math.round(exhaustLs)+' L/s';
+    return {exhaust:true, kW:0, TR:0, BTUh:0, SHR:1, airflowLs:0, oaLs:0,
+      exhaustLs, exhaustACH:ach, exhaustRef:spec.ref||null, exhaustBasis:basis,
+      loadDensity:0, totS:0, totL:0, comps:[], equip:fan, ductD};
+  }
+
   const odb=f('odb'), owb=f('owb'), idb=f('idb'), irh=f('irh');
-  const area=+s.area||0, ch=f('ceilH'), vol=area*ch, dT=odb-idb;
+  const dT=odb-idb;
   const comps=[];
   if(f('roofExposed')==='yes')
     comps.push({n:'Roof', s:f('roofU')*area*(dT+22), l:0});
@@ -262,8 +295,12 @@ function recalcAll(){
 
   /* ── HVAC totals ── */
   const hv=R.hvac;
-  hv.kW=0; hv.air=0; hv.oa=0; hv.count=0;
-  Object.values(R.spaces).forEach(r=>{ if(r.hvac){ hv.kW+=r.hvac.kW; hv.air+=r.hvac.airflowLs; hv.oa+=r.hvac.oaLs; hv.count++; } });
+  hv.kW=0; hv.air=0; hv.oa=0; hv.count=0; hv.exhaust=0; hv.exhaustCount=0;
+  Object.values(R.spaces).forEach(r=>{
+    if(!r.hvac) return;
+    if(r.hvac.exhaust){ hv.exhaust+=r.hvac.exhaustLs; hv.exhaustCount++; }
+    else { hv.kW+=r.hvac.kW; hv.air+=r.hvac.airflowLs; hv.oa+=r.hvac.oaLs; hv.count++; }
+  });
   hv.TR=hv.kW/3.517;
   const div=S.hvacSys.diversity||0.85;
   hv.divKW=hv.kW*div; hv.divTR=hv.divKW/3.517;

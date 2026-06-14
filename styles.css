@@ -348,6 +348,16 @@ select{cursor:pointer;appearance:none;-webkit-appearance:none;
 .dtog button.on.f{background:rgba(255,69,58,.13);color:var(--fire);border-color:rgba(255,69,58,.4)}
 [data-theme=dark] .dtog button.on.p{color:#3ed8d0}
 
+/* select/deselect-all disciplines (column header) */
+.discall-row{display:flex;gap:4px;margin-top:5px}
+.discall{font-size:9.5px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;padding:2px 6px;border-radius:6px;
+  border:1px solid var(--field-border);background:var(--field-bg);color:var(--text3);cursor:pointer;transition:all .14s;line-height:1.4}
+.discall:hover{color:var(--text2);border-color:var(--text3)}
+.discall.on.h{background:rgba(10,132,255,.16);color:var(--hvac);border-color:rgba(10,132,255,.4)}
+.discall.on.p{background:rgba(0,199,190,.16);color:#089690;border-color:rgba(0,199,190,.45)}
+.discall.on.f{background:rgba(255,69,58,.13);color:var(--fire);border-color:rgba(255,69,58,.4)}
+[data-theme=dark] .discall.on.p{color:#3ed8d0}
+
 /* ── sheet (space detail) ── */
 .sheet-bg{position:fixed;inset:0;background:rgba(12,16,30,.42);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
   opacity:0;visibility:hidden;transition:.28s;z-index:50}
@@ -501,16 +511,34 @@ select{cursor:pointer;appearance:none;-webkit-appearance:none;
 /* ── print ── */
 #printArea{display:none}
 @media print{
-  body{background:#fff!important}
+  /* margin:0 makes Chromium browsers omit the default header/footer (URL, date, page number);
+     the page margins are reinstated as padding on #printArea below so the layout is unchanged. */
+  @page{margin:0}
+  html,body{background:#fff!important}
   .bg,.topbar,.foot,.sheet,.sheet-bg,.toast,.view,.sidebar,.side-bg,.modal-bg{display:none!important}
-  #printArea{display:block!important;color:#111;font-size:11.5px}
-  #printArea .phead{display:flex;align-items:center;gap:9px;margin-bottom:2px}
-  #printArea h1{font-size:21px;margin:0}
-  #printArea h2{font-size:15px;margin:18px 0 6px;border-bottom:2px solid #333;padding-bottom:4px}
-  #printArea h3{font-size:12.5px;margin:12px 0 5px}
-  #printArea table{width:100%;border-collapse:collapse;font-size:10.5px;margin:6px 0}
-  #printArea th,#printArea td{border:1px solid #bbb;padding:4px 7px;text-align:left}
-  #printArea th{background:#f0f0f0}
-  #printArea .pmeta{color:#555;font-size:10.5px;margin-bottom:4px}
-  #printArea .num{text-align:right}
+
+  #printArea{display:block!important;font-size:11px;line-height:1.5;font-family:var(--font);
+    padding:14mm 14mm 16mm;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}
+  /* Force ink-dark text + neutral borders regardless of the active (esp. dark) theme,
+     so nothing renders faded on white paper. More specific rules below re-tint where wanted. */
+  #printArea *{color:#1a1a1a!important;border-color:#cfcfcf!important}
+
+  #printArea .phead{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  #printArea h1{font-size:22px;font-weight:800;letter-spacing:-.4px;margin:0}
+  #printArea h2{font-size:14px;font-weight:700;letter-spacing:-.2px;margin:22px 0 8px;
+    border-bottom:1.5px solid #1a1a1a!important;padding-bottom:5px;break-after:avoid;break-inside:avoid}
+  #printArea h3{font-size:12px;font-weight:700;margin:14px 0 5px;color:#333!important;break-after:avoid}
+  #printArea .pmeta{color:#5a5a5a!important;font-size:10px;margin-bottom:3px}
+
+  #printArea table{width:100%;border-collapse:collapse;font-size:10px;margin:6px 0 4px;break-inside:auto}
+  #printArea thead{display:table-header-group}              /* repeat header on every page */
+  #printArea tr{break-inside:avoid;page-break-inside:avoid}
+  #printArea th,#printArea td{border:1px solid #cfcfcf!important;padding:5px 8px;text-align:left;vertical-align:top}
+  #printArea th{background:#eef0f3!important;font-weight:700;border-bottom:1.5px solid #b8bcc4!important}
+  #printArea tbody tr:nth-child(even) td{background:#fafafa!important}
+  #printArea tr.tot td{background:#e8ecf2!important;font-weight:700}
+  #printArea .num{text-align:right;font-variant-numeric:tabular-nums}
+  #printArea .hint{color:#777!important;font-style:italic;font-size:10.5px}
+  #printArea .chip{display:none!important}                  /* drop inline UI chips from the report */
 }

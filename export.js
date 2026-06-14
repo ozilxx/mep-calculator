@@ -49,7 +49,7 @@ function projectNotesMarkdown(){
     f.spaces.forEach(sp=>{
       const r=res.spaces[sp.id]||{};
       md+='\n**'+sp.name+'** — '+sp.type+' · '+Math.round(+sp.area||0)+' m² · '+sp.occupants+' occ\n';
-      if(sp.disc.hvac)md+='- HVAC: '+(r.hvac?r.hvac.kW.toFixed(1)+' kW / '+r.hvac.TR.toFixed(2)+' TR · supply '+Math.round(r.hvac.airflowLs)+' L/s · fresh air '+Math.round(r.hvac.oaLs||0)+' L/s · SHR '+(r.hvac.SHR*100).toFixed(0)+'%':'_not calculated_')+'\n';
+      if(sp.disc.hvac)md+='- HVAC: '+(r.hvac?(r.hvac.exhaust?'exhaust only — '+Math.round(r.hvac.exhaustLs)+' L/s'+(r.hvac.exhaustRef?' ('+r.hvac.exhaustRef+')':''):r.hvac.kW.toFixed(1)+' kW / '+r.hvac.TR.toFixed(2)+' TR · supply '+Math.round(r.hvac.airflowLs)+' L/s · fresh air '+Math.round(r.hvac.oaLs||0)+' L/s · SHR '+(r.hvac.SHR*100).toFixed(0)+'%'):'_not calculated_')+'\n';
       if(sp.disc.plumb)md+='- Plumbing: '+(r.plumb?r.plumb.wsfu.toFixed(0)+' WSFU · '+r.plumb.dfu.toFixed(0)+' DFU · '+r.plumb.Qls.toFixed(2)+' L/s · Ø'+r.plumb.dia+' mm':'_not calculated_')+'\n';
       if(sp.disc.fire)md+='- Fire: '+(r.fire?(HAZ_DATA[r.fire.haz]?HAZ_DATA[r.fire.haz].name:r.fire.haz)+' · '+r.fire.count+' sprinklers · '+r.fire.density+' mm/min':'_not calculated_')+'\n';
     });

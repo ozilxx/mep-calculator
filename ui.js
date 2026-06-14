@@ -154,8 +154,10 @@ function floorHTML(f){
       <button class="rm" title="Remove floor" onclick="UI.rmFloor(${f.id})">✕</button>
     </div>`;
   if(f.spaces.length){
+    const allOn=d=>f.spaces.every(s=>s.disc[d]);
+    const discHd=(d,lbl)=>`<button class="discall ${allOn(d)?'on '+d[0]:''}" title="${allOn(d)?'Disable':'Enable'} ${lbl} for all spaces on this floor" onclick="UI.tglDiscAll(${f.id},'${d}')">${lbl}</button>`;
     h+=`<table class="tbl"><thead><tr><th>Space</th><th>Type</th><th class="num">Area (${uLbl('area')})</th>
-      <th class="num">Occ.</th><th>Disciplines</th><th></th></tr></thead><tbody>`;
+      <th class="num">Occ.</th><th>Disciplines<div class="discall-row">${discHd('hvac','HVAC')}${discHd('plumb','Plumb')}${discHd('fire','Fire')}</div></th><th></th></tr></thead><tbody>`;
     f.spaces.forEach(sp=>{
       const recs=(SPACE_CAT[bt()]||SPACE_TYPE_LIST).filter(t=>SPACE_TYPES[t]);
       const others=SPACE_TYPE_LIST.filter(t=>!recs.includes(t));
@@ -169,7 +171,7 @@ function floorHTML(f){
         <td class="num"><input type="number" min="0" step="1" value="${sp.occupants}" title="${sp.occAuto?'Auto from area × density':'Manual'}"
           style="${sp.occAuto?'opacity:.75':''}" onchange="UI.setOcc(${sp.id},this.value)">${sp.occAuto?'':`<button class="rst" title="Back to auto" onclick="UI.occAuto(${sp.id})">↺</button>`}</td>
         <td><div class="dtog">
-          <button class="${sp.disc.hvac?'on h':''}" title="HVAC" onclick="UI.tglDisc(${sp.id},'hvac')"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/></svg></button>
+          <button class="${sp.disc.hvac?'on h':''}" title="HVAC" onclick="UI.tglDisc(${sp.id},'hvac')"><svg viewBox="0 0 24 24"><path d="M12 2v20M2 12h20M4.9 4.9 19.1 19.1M19.1 4.9 4.9 19.1M9 5 12 2 15 5M9 19 12 22 15 19M5 9 2 12 5 15M19 9 22 12 19 15"/></svg></button>
           <button class="${sp.disc.plumb?'on p':''}" title="Plumbing" onclick="UI.tglDisc(${sp.id},'plumb')"><svg viewBox="0 0 24 24"><path d="M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z"/></svg></button>
           <button class="${sp.disc.fire?'on f':''}" title="Fire" onclick="UI.tglDisc(${sp.id},'fire')"><svg viewBox="0 0 24 24"><path d="M12 3c1 3-2 4-2 7a2 2 0 0 0 4 0c2 2 3 4 3 6a5 5 0 0 1-10 0c0-5 5-6 5-13z"/></svg></button>
         </div></td>
@@ -203,16 +205,20 @@ function renderHvac(){
       ${tile('', dv('airflow',hv.air,0), uLbl('airflow'), 'Total Supply Air')}
       ${tile('', dv('airflow',hv.oa,0), uLbl('airflow'), `Total Fresh Air (${pval('hvac','oaMode')==='pct'?pval('hvac','oaPct')+'% of supply':'62.1'})`)}
       ${tile('', totalArea()>0?dv('pdens',hv.kW*1000/Math.max(1,totalArea()),0):'—', uLbl('pdens'), 'Avg Load Density')}
+      ${hv.exhaust>0?tile('', dv('airflow',hv.exhaust,0), uLbl('airflow'), `Total Exhaust — 62.1 Tbl 6-4 (${hv.exhaustCount} space${hv.exhaustCount===1?'':'s'})`):''}
     </div>
     ${hv.divTR>0?`<div class="banner green">⚙️ Suggested plant: <strong>${E(hv.plant)}</strong></div>`:''}
     ${floorBars('kW','Cooling by floor — kW')}
   </div>`;
 
   /* per-space table */
-  h+=spaceResultTable('hvac','Space Cooling Loads','var(--hvac)',
-    ['Space','Floor',`Area (${uLbl('area')})`,'Occ.','kW','TR',`Supply (${uLbl('airflow')})`,`OA (${uLbl('airflow')})`,'Equipment'],
-    (sp,fl,r)=>[E(sp.name),E(fl.name),dv('area',sp.area,0),sp.occupants,fmt(r.kW,1),fmt(r.TR,2),
-      dv('airflow',r.airflowLs,0),dv('airflow',r.oaLs,0),`<span class="chip blue">${E(r.equip)}</span>`]);
+  h+=spaceResultTable('hvac','Space Cooling & Exhaust','var(--hvac)',
+    ['Space','Floor',`Area (${uLbl('area')})`,'Occ.','kW','TR',`Supply (${uLbl('airflow')})`,`OA / Exhaust (${uLbl('airflow')})`,'Equipment'],
+    (sp,fl,r)=> r.exhaust
+      ? [E(sp.name),E(fl.name),dv('area',sp.area,0),sp.occupants,'—','—','—',
+         dv('airflow',r.exhaustLs,0),`<span class="chip">🌀 ${E(r.equip)}</span>`]
+      : [E(sp.name),E(fl.name),dv('area',sp.area,0),sp.occupants,fmt(r.kW,1),fmt(r.TR,2),
+         dv('airflow',r.airflowLs,0),dv('airflow',r.oaLs,0),`<span class="chip blue">${E(r.equip)}</span>`]);
   return h;
 }
 
@@ -403,14 +409,16 @@ function renderReport(){
     <div class="card-sub">${E(m.name)} · ${E(m.buildingType)} · ${E(m.city?m.city+', ':'')}${E(m.country)} · ${E(m.date||'')}
     ${m.client?` · Client: ${E(m.client)}`:''}${m.engineer?` · By: ${E(m.engineer)}`:''}</div>
     <div class="hero">
-      ${heroCard('Cooling Plant', fmt(hv.divTR,1),'TR @ diversity','#0a84ff','M12 3v18M3 12h18')}
-      ${heroCard('Peak Water', dv('flow',pl.Qls,1),uLbl('flow'),'#00c7be','M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z')}
-      ${heroCard('Fire Pump', fmt(fr.pumpGpm,0)+' gpm','@ '+fmt(fr.pumpBar,1)+' bar','#ff453a','M12 3c1 3-2 4-2 7a2 2 0 0 0 4 0c2 2 3 4 3 6a5 5 0 0 1-10 0c0-5 5-6 5-13z')}
-      ${heroCard('Storage', fmt(pl.ugTank+pl.roofTank,0)+' + '+fmt(fr.tank,0),'m³ domestic + fire','#ff9f0a','M4 8h16v12H4zM4 8l8-5 8 5')}
+      ${discActive('hvac')?heroCard('Cooling Plant', fmt(hv.divTR,1),'TR @ diversity','#0a84ff','M12 2v20M2 12h20M4.9 4.9 19.1 19.1M19.1 4.9 4.9 19.1M9 5 12 2 15 5M9 19 12 22 15 19M5 9 2 12 5 15M19 9 22 12 19 15'):''}
+      ${discActive('plumb')?heroCard('Peak Water', dv('flow',pl.Qls,1),uLbl('flow'),'#00c7be','M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z'):''}
+      ${discActive('fire')?heroCard('Fire Pump', fmt(fr.pumpGpm,0)+' gpm','@ '+fmt(fr.pumpBar,1)+' bar','#ff453a','M12 3c1 3-2 4-2 7a2 2 0 0 0 4 0c2 2 3 4 3 6a5 5 0 0 1-10 0c0-5 5-6 5-13z'):''}
+      ${(discActive('plumb')||discActive('fire'))?heroCard('Storage', fmt((discActive('plumb')?pl.ugTank+pl.roofTank:0)+(discActive('fire')?fr.tank:0),0),'m³'+(discActive('plumb')?' domestic':'')+(discActive('plumb')&&discActive('fire')?' +':'')+(discActive('fire')?' fire':''),'#ff9f0a','M4 8h16v12H4zM4 8l8-5 8 5'):''}
     </div></div>`;
-  h+=collap('rH','❄️ HVAC — space schedule', reportTable('hvac'), true);
-  h+=collap('rP','💧 Plumbing — space schedule', reportTable('plumb'));
-  h+=collap('rF','🔥 Fire — space schedule', reportTable('fire'));
+  let firstOpen=true;
+  const sect=(d,id,title,disc)=>{ if(!discActive(d)) return ''; const o=firstOpen; firstOpen=false; return collap(id,title,reportTable(disc),o); };
+  h+=sect('hvac','rH','❄️ HVAC — space schedule','hvac');
+  h+=sect('plumb','rP','💧 Plumbing — space schedule','plumb');
+  h+=sect('fire','rF','🔥 Fire — space schedule','fire');
   h+=collap('rE','⚙️ Equipment schedule', equipTable());
   return h;
 }
@@ -424,9 +432,11 @@ function reportTable(disc){
   if(!rows.length) return `<div class="hint">No spaces.</div>`;
   let heads,fn,totRow;
   if(disc==='hvac'){
-    heads=['Space','Floor',`Area`,'kW','TR',`Supply ${uLbl('airflow')}`,`OA ${uLbl('airflow')}`,'SHR','Equipment'];
-    fn=(sp,fl,r)=>[E(sp.name),E(fl.name),dv('area',sp.area,0),fmt(r.kW,1),fmt(r.TR,2),dv('airflow',r.airflowLs,0),dv('airflow',r.oaLs,0),(r.SHR*100).toFixed(0)+'%',E(r.equip)];
-    totRow=['TOTAL','','',fmt(R.hvac.kW,1),fmt(R.hvac.TR,1),dv('airflow',R.hvac.air,0),dv('airflow',R.hvac.oa,0),'',''];
+    heads=['Space','Floor',`Area`,'kW','TR',`Supply ${uLbl('airflow')}`,`OA/Exh ${uLbl('airflow')}`,'SHR','Equipment'];
+    fn=(sp,fl,r)=> r.exhaust
+      ? [E(sp.name),E(fl.name),dv('area',sp.area,0),'—','—','—',dv('airflow',r.exhaustLs,0),'exh.',E(r.equip)]
+      : [E(sp.name),E(fl.name),dv('area',sp.area,0),fmt(r.kW,1),fmt(r.TR,2),dv('airflow',r.airflowLs,0),dv('airflow',r.oaLs,0),(r.SHR*100).toFixed(0)+'%',E(r.equip)];
+    totRow=['TOTAL','','',fmt(R.hvac.kW,1),fmt(R.hvac.TR,1),dv('airflow',R.hvac.air,0),dv('airflow',R.hvac.oa,0)+(R.hvac.exhaust>0?' / '+dv('airflow',R.hvac.exhaust,0)+' exh':''),'',''];
   } else if(disc==='plumb'){
     heads=['Space','Floor','WSFU','DFU',`Peak ${uLbl('flow')}`,`Pipe ${uLbl('dia')}`,`Drain ${uLbl('dia')}`];
     fn=(sp,fl,r)=>[E(sp.name),E(fl.name),fmt(r.wsfu,1),fmt(r.dfu,1),dv('flow',r.Qls,2),dv('dia',r.dia,0),r.branchD?dv('dia',r.branchD,0):'—'];
@@ -445,20 +455,24 @@ function reportTable(disc){
 }
 function equipTable(){
   const pl=R.plumb, fr=R.fire, hv=R.hvac;
-  const rows=[
-    ['Cooling plant', E(hv.plant), fmt(hv.divKW,0)+' kW cooling'],
+  const rows=[];
+  if(discActive('hvac')){
+    rows.push(['Cooling plant', E(hv.plant), fmt(hv.divKW,0)+' kW cooling']);
+    if(hv.exhaust>0) rows.push(['Exhaust fans', dv('airflow',hv.exhaust,0)+' '+uLbl('airflow'), hv.exhaustCount+' exhaust-only space'+(hv.exhaustCount===1?'':'s')+' · ASHRAE 62.1 Tbl 6-4']);
+  }
+  if(discActive('plumb')) rows.push(
     ['Booster pump set (1+1)', dv('flow',pl.booster.Qls,1)+' '+uLbl('flow')+' @ '+dv('head',pl.booster.tdh,0)+' '+uLbl('head'), fmt(pl.booster.kw,1)+' kW each'],
     ['Transfer pump set (1+1)', dv('flow',pl.transfer.Qls,1)+' '+uLbl('flow')+' @ '+dv('head',pl.transfer.tdh,0)+' '+uLbl('head'), fmt(pl.transfer.kw,1)+' kW each'],
     ['Sewage submersible (1+1)', dv('flow',pl.sewage.Qls,1)+' '+uLbl('flow')+' @ '+dv('head',pl.sewage.tdh,0)+' '+uLbl('head'), fmt(pl.sewage.kw,1)+' kW each'],
     ['Central water heater', fmt(pl.heaterVol,0)+' L storage', fmt(pl.heaterKW,1)+' kW'],
     ['UG water tank', dv('volume',pl.ugTank,1)+' '+uLbl('volume'), 'potable, '+pl.days+'-day'],
-    ['Roof water tank', dv('volume',pl.roofTank,1)+' '+uLbl('volume'), fmt(pl.roofLoad,0)+' kN full'],
+    ['Roof water tank', dv('volume',pl.roofTank,1)+' '+uLbl('volume'), fmt(pl.roofLoad,0)+' kN full']);
+  if(discActive('fire')) rows.push(
     ['Fire pump set (NFPA 20)', fmt(fr.pumpGpm,0)+' gpm @ '+fmt(fr.pumpBar,1)+' bar', 'electric + diesel + jockey'],
     ['Fire water tank', dv('volume',fr.tank,0)+' '+uLbl('volume'), fr.duration+' min duration'],
     ['Sprinkler heads', fmt(fr.spr,0)+' no.', 'K'+fmt(pval('fire','K'),0)+', '+fr.maxHaz+' governing'],
     ['Portable extinguishers', fr.extTotal+' no.', 'max 23 m travel'],
-    ['Fire hose cabinets', fr.cabinets+' no.', 'NFPA 14 Class II']
-  ];
+    ['Fire hose cabinets', fr.cabinets+' no.', 'NFPA 14 Class II']);
   return `<table class="tbl"><thead><tr><th>Item</th><th>Duty / Size</th><th>Notes</th></tr></thead><tbody>`+
     rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td style="color:var(--text2)">${r[2]}</td></tr>`).join('')+`</tbody></table>`;
 }
@@ -484,6 +498,19 @@ function renderSheet(){
 }
 function sheetHvac(s,r){
   const fields=hvacFields(s);
+  if(r.exhaust){
+    const exFields=fields.filter(f=>['hvacMode','exhaustRate','ceilH'].includes(f.key));
+    return `<div class="sec">Results — live · Exhaust only</div><div class="mgrid">
+      ${tile('hl',dv('airflow',r.exhaustLs,0),uLbl('airflow'),'Exhaust Airflow')}
+      ${tile('',fmt(r.exhaustACH,1),'ACH','Implied Air Changes')}
+      ${tile('',fmt(r.ductD,0),'mm Ø','Exhaust Duct @ 5 m/s')}
+    </div>
+    <div class="banner">🌀 Exhaust-only space — <strong>no sensible cooling load</strong> is computed. ${r.exhaustBasis?`Rate basis: ${E(r.exhaustBasis)}.`:'Set the code exhaust rate below.'}</div>
+    ${r.exhaustRef?`<div class="banner amber">📖 Code basis: <strong>${E(r.exhaustRef)}</strong> — verify against the governing local mechanical code.</div>`:''}
+    <div class="banner">⚙️ Suggested unit: <strong>${E(r.equip)}</strong></div>
+    <div class="sec">Mode & Exhaust — this space</div>
+    <div class="fg">${exFields.map(f=>fieldHTML('hvac',f,'s',s.id)).join('')}</div>`;
+  }
   let h=`<div class="sec">Results — live</div><div class="mgrid">
     ${tile('hl',fmt(r.kW,1),'kW','Cooling Load')}
     ${tile('hl',fmt(r.TR,2),'TR','Tons')}
@@ -500,7 +527,7 @@ function sheetHvac(s,r){
   ${r.comps.map(c=>`<tr><td>${E(c.n)}</td><td class="num">${c.s>0?dv('power',c.s,0):'—'}</td><td class="num">${c.l>0?dv('power',c.l,0):'—'}</td><td class="num"><strong>${dv('power',c.s+c.l,0)}</strong></td></tr>`).join('')}
   <tr class="tot"><td>TOTAL × safety</td><td class="num">${dv('power',r.totS,0)}</td><td class="num">${dv('power',r.totL,0)}</td><td class="num">${dv('power',r.totS+r.totL,0)}</td></tr></tbody></table>
   <div class="sec">Geometry & Internal Loads — this space</div>
-  <div class="fg">${fields.filter(f=>!f.shared).map(f=>fieldHTML('hvac',f,'s',s.id)).join('')}</div>
+  <div class="fg">${fields.filter(f=>!f.shared && f.key!=='exhaustRate').map(f=>fieldHTML('hvac',f,'s',s.id)).join('')}</div>
   <div class="sec">Design Conditions — inherited project defaults</div>
   <div class="fg">${fields.filter(f=>f.shared).map(f=>fieldHTML('hvac',f,'s',s.id)).join('')}</div>`;
   return h;
@@ -568,7 +595,8 @@ function sheetFire(s,r){
 function buildPrint(){
   const m=S.meta, hv=R.hvac, pl=R.plumb, fr=R.fire, hd=HAZ_DATA[fr.maxHaz];
   const t=(disc)=>reportTable(disc).replace(/class="tbl"/g,'').replace(/<div style="overflow-x:auto">|<\/div>$/g,'');
-  return `
+  let n=0;                                  // section counter — only enabled disciplines are numbered
+  let out=`
   <div class="phead">
     <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.07 8A8 8 0 0 1 18.93 8L5.07 16A8 8 0 0 0 18.93 16"/></svg>
     <h1>${E(m.name)}</h1>
@@ -577,18 +605,20 @@ function buildPrint(){
    ${m.client?`· Client: ${E(m.client)} `:''}${m.engineer?`· Prepared by: ${E(m.engineer)}`:''}</div>
   <div class="pmeta">Codes: ${(COUNTRY_CODES[m.country]||[]).join(' · ')} · Units: ${S.units==='imp'?'Imperial':'SI'}</div>
 
-  <h2>1. Project Summary</h2>
+  <h2>${++n}. Project Summary</h2>
   <table><tr><th>Floors</th><th>Spaces</th><th>Total Area</th><th>Occupants</th><th>Height</th></tr>
-  <tr><td>${S.floors.length}</td><td>${allSpaces().length}</td><td>${dvu('area',totalArea(),0)}</td><td>${totalOccupants()}</td><td>${dvu('length',m.height,1)}</td></tr></table>
+  <tr><td>${S.floors.length}</td><td>${allSpaces().length}</td><td>${dvu('area',totalArea(),0)}</td><td>${totalOccupants()}</td><td>${dvu('length',m.height,1)}</td></tr></table>`;
 
-  <h2>2. HVAC</h2>
-  <div class="pmeta">Design: ${dv('temp',cd().odb,0)}/${dv('temp',cd().owb,0)} ${uLbl('temp')} outdoor DB/WB · ${dv('temp',cd().idb,0)} ${uLbl('temp')} / ${cd().irh}% RH indoor · ${pval('hvac','oaMode')==='pct'?'ventilation @ '+pval('hvac','oaPct')+'% of supply air':'ASHRAE 62.1 ventilation'}</div>
-  <table><tr><th>Total Cooling</th><th>@ Diversity ${Math.round(S.hvacSys.diversity*100)}%</th><th>Supply Air</th><th>Fresh Air</th><th>Plant</th></tr>
+  if(discActive('hvac')) out+=`
+  <h2>${++n}. HVAC</h2>
+  <div class="pmeta">Design: ${dv('temp',cd().odb,0)}/${dv('temp',cd().owb,0)} ${uLbl('temp')} outdoor DB/WB · ${dv('temp',cd().idb,0)} ${uLbl('temp')} / ${cd().irh}% RH indoor · ${pval('hvac','oaMode')==='pct'?'ventilation @ '+pval('hvac','oaPct')+'% of supply air':'ASHRAE 62.1 ventilation'}${hv.exhaust>0?' · exhaust per ASHRAE 62.1 Table 6-4':''}</div>
+  <table><tr><th>Total Cooling</th><th>@ Diversity ${Math.round(S.hvacSys.diversity*100)}%</th><th>Supply Air</th><th>Fresh Air</th>${hv.exhaust>0?'<th>Exhaust</th>':''}<th>Plant</th></tr>
   <tr><td>${fmt(hv.kW,1)} kW / ${fmt(hv.TR,1)} TR</td><td>${fmt(hv.divKW,1)} kW / ${fmt(hv.divTR,1)} TR</td>
-  <td>${dvu('airflow',hv.air,0)}</td><td>${dvu('airflow',hv.oa,0)}</td><td>${E(hv.plant)}</td></tr></table>
-  <h3>Space schedule</h3>${t('hvac')}
+  <td>${dvu('airflow',hv.air,0)}</td><td>${dvu('airflow',hv.oa,0)}</td>${hv.exhaust>0?`<td>${dvu('airflow',hv.exhaust,0)}</td>`:''}<td>${E(hv.plant)}</td></tr></table>
+  <h3>Space schedule</h3>${t('hvac')}`;
 
-  <h2>3. Plumbing</h2>
+  if(discActive('plumb')) out+=`
+  <h2>${++n}. Plumbing</h2>
   <table><tr><th>Peak Demand</th><th>Main Ø</th><th>Daily Demand</th><th>UG Tank</th><th>Roof Tank</th><th>Booster</th><th>Heater</th></tr>
   <tr><td>${fmt(pl.wsfu,0)} WSFU → ${dvu('flow',pl.Qls,2)}</td><td>${dvu('dia',pl.mainDia,0)}</td><td>${fmt(pl.daily,1)} m³/d</td>
   <td>${dvu('volume',pl.ugTank,1)}</td><td>${dvu('volume',pl.roofTank,1)}</td>
@@ -598,17 +628,20 @@ function buildPrint(){
   <tr><td>${fmt(pl.dfu,0)}</td><td>${dvu('dia',pl.stackDia,0)}</td><td>${dvu('dia',pl.sewerDia,0)}</td>
   <td>${dvu('flow',pl.sewage.Qls,1)} @ ${dvu('head',pl.sewage.tdh,0)}</td>
   <td>${dvu('flow',pl.storm.Qls,1)}</td><td>${pl.storm.count} × ${dvu('dia',pl.storm.leader,0)}</td></tr></table>
-  <h3>Space schedule</h3>${t('plumb')}
+  <h3>Space schedule</h3>${t('plumb')}`;
 
-  <h2>4. Fire Protection</h2>
+  if(discActive('fire')) out+=`
+  <h2>${++n}. Fire Protection</h2>
   <div class="pmeta">NFPA 13 density/area · governing hazard: ${hd.name} (${fmt(hd.density,1)} mm/min over ${fmt(hd.designArea,0)} m²)</div>
   <table><tr><th>Sprinklers</th><th>Demand</th><th>Fire Pump</th><th>Pressure</th><th>Tank (${fr.duration} min)</th><th>Extinguishers</th><th>Cabinets</th></tr>
   <tr><td>${fmt(fr.spr,0)}</td><td>${fmt(fr.totFlow,0)} L/min (${fmt(fr.gpm,0)} gpm)</td><td>${fmt(fr.pumpGpm,0)} gpm</td>
   <td>${fmt(fr.pumpBar,1)} bar</td><td>${dvu('volume',fr.tank,0)}</td><td>${fr.extTotal}</td><td>${fr.cabinets}</td></tr></table>
-  <h3>Space schedule</h3>${t('fire')}
+  <h3>Space schedule</h3>${t('fire')}`;
 
-  <h2>5. Equipment Schedule</h2>${equipTable().replace('class="tbl"','')}
+  out+=`
+  <h2>${++n}. Equipment Schedule</h2>${equipTable().replace('class="tbl"','')}
   <div class="pmeta" style="margin-top:14px">Concept-stage estimates generated by MEP Studio · by Ozil — verify all values against governing local codes and detailed hydraulic/load calculations before issue.</div>`;
+  return out;
 }
 
 /* ════════════════════════════════════════════════════════
@@ -668,12 +701,20 @@ const UI = {
   setSpace(id,k,v){
     const s=findSpace(id); if(!s) return;
     s[k]=k==='area'?Math.max(0,+v||0):v;
-    if((k==='area'||k==='type') && s.occAuto) s.occupants=spaceOcc(s.type,s.area);
+    if(k==='type') s.typeManual=true;            // user picked a type explicitly — stop auto-guessing
+    if(k==='name' && !s.typeManual){             // smart: infer space type from the name typed
+      const g=guessSpaceType(v);
+      if(g && g!==s.type){ s.type=g; toast('Type set to “'+g+'” from name'); }
+    }
+    if((k==='area'||k==='type'||k==='name') && s.occAuto) s.occupants=spaceOcc(s.type,s.area);
     App.save(); UI.refresh();
   },
   setOcc(id,v){ const s=findSpace(id); if(!s) return; s.occupants=Math.max(0,Math.round(+v||0)); s.occAuto=false; App.save(); UI.refresh(); },
   occAuto(id){ const s=findSpace(id); if(!s) return; s.occAuto=true; s.occupants=spaceOcc(s.type,s.area); App.save(); UI.refresh(); },
   tglDisc(id,d){ const s=findSpace(id); if(!s) return; s.disc[d]=!s.disc[d]; App.save(); UI.refresh(); },
+  tglDiscAll(fid,d){ const f=S.floors.find(x=>x.id===fid); if(!f||!f.spaces.length) return;
+    const turnOff=f.spaces.every(s=>s.disc[d]); f.spaces.forEach(s=>s.disc[d]=!turnOff);
+    App.save(); UI.refresh(); toast((turnOff?'Disabled':'Enabled')+' '+d.toUpperCase()+' for all spaces on this floor'); },
   /* fields */
   setField(el,kind,sid,disc,key){
     const spec=fieldSpec(disc,key, kind==='s'?findSpace(+sid):null);
